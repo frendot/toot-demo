@@ -128,7 +128,7 @@ async function arm(creatures) {
   const plan = [];
   let t = t0;
   if (cfg.fakeout) {
-    plan.push({ ref: { type: 'lib', id: 'lib-squeaker' }, at: t, rate: 1.1 });
+    plan.push({ ref: { type: 'lib', id: 'snd-tiny' }, at: t, rate: 1.1 });
     t += 0.5 + randBetween(4, 8);
   }
   plan.push({ ref: snd.ref, at: t, rate: 1 });

@@ -51,7 +51,8 @@ register('home', async (root) => {
       tile('go-lab', 'Sound Lab', 'Get judged', '#7e57c2', () => go('lab')),
       tile('go-battle', 'Toot Battles', 'Family game night', '#29b6f6', () => go('battleSetup')),
       tile('go-dex', 'Toot-o-dex', 'Your creatures', '#8bc34a', () => go('dex'))),
-    el('p', { class: 'muted small center' }, 'Free demo. No ads, no accounts, nothing uploaded.')));
+    el('p', { class: 'muted small center' }, 'Free demo. No ads, no accounts, nothing uploaded.'),
+    el('p', { class: 'center' }, el('button', { class: 'linkish', id: 'go-credits', onclick: () => go('credits') }, 'Credits & licences'))));
 });
 
 // ---- Optional feedback prompt (after a few sessions, skippable, stored on device) ----

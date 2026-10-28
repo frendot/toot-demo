@@ -10,7 +10,7 @@ import { cloudSVG } from './art.js';
 register('splash', (root) => {
   const btn = el('button', { class: 'press-me', id: 'press-me', onclick: async () => {
     await unlockAudio();
-    play({ type: 'lib', id: 'lib-whoopee' });
+    play({ type: 'lib', id: 'snd-whoopee' });
     confetti(50);
     btn.classList.add('boing');
     metrics.feature('firstToot');
@@ -60,10 +60,10 @@ register('age', (root, { changing }) => {
 });
 
 register('firstCreature', async (root) => {
-  const res = await mintFromSound('lib-whoopee', { type: 'lib', id: 'lib-whoopee' }, 'First toot');
+  const res = await mintFromSound('snd-tuba', { type: 'lib', id: 'snd-tuba' }, 'First toot');
   const c = res.creature || CATALOG[0];
   const sp = CATALOG.find((s) => s.speciesId === c.id);
-  play({ type: 'lib', id: 'lib-whoopee' }, 0, { rate: 1.15 });
+  play(c.soundRef || { type: 'lib', id: 'snd-tuba' }, 0, { rate: 1.05 });
   confetti(30);
   root.append(el('main', { class: 'pad center reveal' },
     el('p', { class: 'muted' }, 'Your toot became a creature!'),

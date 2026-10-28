@@ -44,13 +44,36 @@ export const BIO_PARTS = {
   loves: ['Loves jazz.', 'Loves marching bands.', 'Loves bubble baths.', 'Loves penguins in bow ties.', 'Loves opera.', 'Loves knock-knock jokes.', 'Loves trampolines.', 'Loves polka dots.'],
 };
 
+// Each species' voice comes from one real-sample group (see samples.js / Credits).
+export const SPECIES_GROUP = {
+  // Band: brassy, tuneful toots
+  'The Nervous Tuba': 'tuba', 'The Reluctant Trombone': 'tuba', 'The Polite Kazoo': 'classic', 'The Sleepy Bassoon': 'tuba',
+  'The Wobbly Ukulele': 'classic', 'The Bashful Harmonica': 'squeak', 'The Cheerful Tin Whistle': 'squeak', 'The Grumpy Bagpipe': 'ripper',
+  'The Jolly Accordion': 'sequence', 'The Sneaky Sousaphone': 'tiny', 'The Fancy Trombone': 'double', 'The Dramatic Tuba': 'tuba',
+  // Royals: proper, polite little toots (and one royal cushion)
+  'Sir Squeaksalot': 'squeak', 'Lady Puffington': 'tiny', 'Lord Rumblewick of Teacup Hill': 'ripper', 'Baron von Pfft': 'tiny',
+  'Prince Pippity Parp': 'classic', 'Countess Tootington': 'classic', 'Duke Wobbleworth': 'double', 'Duchess Rumbleton of Bean Valley': 'ripper',
+  'Queen Whoopee the First': 'whoopee', 'King Trumpetus Rex': 'tuba',
+  // Weather: rumbles, drizzles and storms
+  'Thunderpuff': 'ripper', 'Squeakquake': 'squeak', 'Drizzle Toot': 'wet', 'Breezy McBreeze': 'tiny',
+  'Hurricane Hiccup': 'sequence', 'Misty Mistington': 'wet', 'Rainbow Rumble': 'double', 'Tornado Tootsie': 'sequence',
+  'Aurora Tootealis': 'cartoon', 'Volcano Vroom': 'ripper',
+  // Legends: the big and the strange
+  'Puffasaurus': 'tuba', 'Toot Hood': 'classic', 'Tootzilla': 'ripper', 'Beethooten': 'sequence',
+  'Krakatoot': 'double', 'Tootankhamun': 'cartoon', 'Leonardo da Pfftci': 'squeak', 'The Great Whoopee Comet': 'whoopee',
+};
+
 export const CATALOG = [];
 for (const [fam, list] of [['Band', BAND], ['Royals', ROYALS], ['Weather', WEATHER], ['Legends', LEGENDS]]) {
   for (const [name, rarity] of list) {
     const seed = hashStr(name);
-    CATALOG.push({ speciesId: 's' + seed.toString(36), name, family: fam, rarity, seed });
+    CATALOG.push({ speciesId: 's' + seed.toString(36), name, family: fam, rarity, seed, group: SPECIES_GROUP[name] || 'classic' });
   }
 }
+
+// Which sound groups each family is made of (shown in the Toot-o-dex).
+export const FAMILY_GROUPS = {};
+for (const c of CATALOG) { (FAMILY_GROUPS[c.family] = FAMILY_GROUPS[c.family] || new Set()).add(c.group); }
 
 export function speciesInfo(sp) {
   const r = mulberry32(sp.seed);
@@ -147,9 +170,22 @@ export async function mint(species, source, soundRef) {
 // Each sound maps to exactly one species (deterministic), minted once per sound.
 export async function mintFromSound(soundKey, soundRef, source) {
   const minted = (await kv.get('mintedSounds')) || {};
-  const species = soundKey === 'lib-whoopee' ? CATALOG.find((c) => c.name === 'The Nervous Tuba') : speciesForSeed(hashStr(soundKey));
+  let species;
+  if (soundKey === 'lib-whoopee' || soundKey === 'snd-tuba') species = CATALOG.find((c) => c.name === 'The Nervous Tuba');
+  else if (soundKey.startsWith('snd-')) {
+    // A library sound group always hatches a creature voiced by that same group.
+    const group = soundKey.slice(4);
+    const rng = mulberry32(hashStr(soundKey));
+    const pool = CATALOG.filter((c) => c.group === group);
+    // Library sounds hatch the least rare species of their group, so rare ones still come from packs.
+    const rank = (c) => RARITIES.findIndex((r) => r.id === c.rarity);
+    const low = Math.min(...pool.map(rank));
+    const easy = pool.filter((c) => rank(c) === low);
+    species = easy[Math.floor(rng() * easy.length)] || speciesForSeed(hashStr(soundKey));
+  } else species = speciesForSeed(hashStr(soundKey));
   if (minted[soundKey]) return { creature: await creaturesDB.get(minted[soundKey]), isNew: false, already: true };
-  const res = await mint(species, source, soundRef);
+  // Library groups: the creature keeps its own signature voice (a fixed sample from its group).
+  const res = await mint(species, source, soundRef && soundRef.type === 'lib' ? null : soundRef);
   minted[soundKey] = species.speciesId;
   await kv.set('mintedSounds', minted);
   return res;

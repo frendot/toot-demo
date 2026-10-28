@@ -1,7 +1,10 @@
-// Web Audio engine. All toot sounds are synthesised in code (no samples, no downloads).
+// Web Audio engine. Primary toots are real CC0 samples (samples.js, decoded once and cached);
+// the code synth below is the fallback if a sample can't load/decode, and still voices UI blips.
 // One shared AudioContext, every playback goes through a master gain (parent volume cap).
 import { mulberry32, clamp } from './util.js';
 import { metrics } from './metrics.js';
+import { GROUPS, sampleById, nextSampleId, signatureSampleId, sampleBuffer, preloadSamples, markPlayed, seedGroup } from './samples.js';
+import { CATALOG } from './creatures.js';
 
 let ctx = null;
 let master = null;
@@ -29,8 +32,11 @@ export async function unlockAudio() {
   setAudioSessionType('playback');
   const c = getCtx();
   if (c.state !== 'running') { try { await c.resume(); } catch (e) { /* ignore */ } }
+  preloadSamples(c); // fetch + decode every sample once, in the background
   return c;
 }
+
+export function preloadAllSamples() { return preloadSamples(getCtx()); }
 
 export function setVolumeCap(v) {
   volumeCap = clamp(v, 0.05, 1);
@@ -39,8 +45,8 @@ export function setVolumeCap(v) {
 
 export const INSTRUMENTS = ['whoopee', 'tuba', 'kazoo', 'duck', 'squeaker', 'rumble', 'trumpet', 'balloon', 'pfft', 'sputter'];
 
-// Library: hand-tuned synth recipes.
-export const LIBRARY = [
+// Synth recipes (fallback voices + legacy saved refs).
+export const SYNTH_LIBRARY = [
   { id: 'lib-whoopee', name: 'Classic Whoopee', p: { inst: 'whoopee', f0: 120, f1: 80, dur: 1.2, vib: 22, vibDepth: 0.12, flutter: 28, noise: 0.15, bright: 0.5 } },
   { id: 'lib-squeaker', name: 'Tiny Squeaker', p: { inst: 'squeaker', f0: 620, f1: 900, dur: 0.45, vib: 30, vibDepth: 0.05, flutter: 0, noise: 0.03, bright: 0.9 } },
   { id: 'lib-tuba', name: 'Big Brass Tuba', p: { inst: 'tuba', f0: 70, f1: 55, dur: 1.8, vib: 6, vibDepth: 0.04, flutter: 14, noise: 0.08, bright: 0.25 } },
@@ -53,13 +59,51 @@ export const LIBRARY = [
   { id: 'lib-sputter', name: 'Stairway Sputter', p: { inst: 'sputter', f0: 140, f1: 70, dur: 1.5, vib: 12, vibDepth: 0.1, flutter: 22, noise: 0.15, bright: 0.5, pulses: 5 } },
 ];
 
-export function libraryById(id) { return LIBRARY.find((s) => s.id === id); }
+const synthFor = (inst) => SYNTH_LIBRARY.find((s) => s.p.inst === inst);
+// The Toot Library shown to players: one entry per real-sample group, each with a synth fallback recipe.
+export const LIBRARY = GROUPS.map((g) => ({ id: 'snd-' + g.id, name: g.name, group: g.id, p: synthFor(g.synth).p }));
+// Older saves used synth ids; they now play the matching sample group.
+const LEGACY = { 'lib-whoopee': 'whoopee', 'lib-squeaker': 'squeak', 'lib-tuba': 'tuba', 'lib-kazoo': 'classic', 'lib-duck': 'double', 'lib-rumble': 'ripper', 'lib-trumpet': 'tuba', 'lib-balloon': 'cartoon', 'lib-pfft': 'tiny', 'lib-sputter': 'sequence' };
+
+export function libraryById(id) {
+  return LIBRARY.find((s) => s.id === id) || (LEGACY[id] && LIBRARY.find((s) => s.group === LEGACY[id])) || SYNTH_LIBRARY.find((s) => s.id === id);
+}
+
+// Group for a creature/voice seed: species group if the seed is a catalog species, else a stable pick.
+export function groupForSeed(seed) {
+  const sp = CATALOG.find((c) => c.seed === seed);
+  return sp ? sp.group : seedGroup(seed);
+}
+
+// Turn a "play something from this group" ref into one concrete sample ref (used before judging,
+// so the sound heard is the one analysed). Concrete refs are returned unchanged.
+export function resolveRef(ref) {
+  if (!ref) return ref;
+  if (ref.type === 'lib') {
+    const s = libraryById(ref.id);
+    if (s && s.group) { const id = nextSampleId(s.group); if (id) return { type: 'smp', id, fallback: s.id }; }
+  }
+  if (ref.type === 'seed') {
+    const id = signatureSampleId(ref.seed, groupForSeed(ref.seed));
+    if (id) return { type: 'smp', id, seed: ref.seed };
+  }
+  return ref;
+}
+
+// Which sample group a ref belongs to (for group-specific judge lines). null for recordings.
+export function groupOfRef(ref) {
+  if (!ref) return null;
+  if (ref.type === 'smp') { const s = sampleById(ref.id); return s ? s.group : null; }
+  if (ref.type === 'lib') { const s = libraryById(ref.id); return (s && s.group) || null; }
+  if (ref.type === 'seed') return groupForSeed(ref.seed);
+  return null;
+}
 
 // Recipe for a creature/random voice from a numeric seed.
 export function recipeFromSeed(seed) {
   const r = mulberry32(seed);
   const inst = INSTRUMENTS[Math.floor(r() * INSTRUMENTS.length)];
-  const base = LIBRARY.find((s) => s.p.inst === inst).p;
+  const base = synthFor(inst).p;
   return {
     ...base,
     f0: base.f0 * (0.7 + r() * 0.7),
@@ -132,12 +176,12 @@ export function bufferFromSamples(samples, sampleRate) {
 
 // Sound refs: {type:'lib', id} | {type:'seed', seed} | {type:'rec', id} | {type:'pcm', samples, sampleRate}
 export function samplesForRef(ref) {
-  const key = ref.type === 'lib' ? ref.id : ref.type === 'seed' ? 'seed-' + ref.seed : null;
+  const key = ref.type === 'lib' || ref.type === 'synth' ? 'syn-' + ref.id : ref.type === 'seed' ? 'seed-' + ref.seed : null;
   if (key && bufferCache.has(key)) return bufferCache.get(key);
   let res = null;
   const sr = getCtx().sampleRate;
-  if (ref.type === 'lib') {
-    const s = libraryById(ref.id);
+  if (ref.type === 'lib' || ref.type === 'synth') {
+    const s = (ref.type === 'synth' && SYNTH_LIBRARY.find((x) => x.id === ref.id)) || libraryById(ref.id);
     res = { samples: synth({ ...s.p, seed: 777 + s.id.length }, sr), sampleRate: sr };
   } else if (ref.type === 'seed') {
     res = { samples: synth(recipeFromSeed(ref.seed), sr), sampleRate: sr };
@@ -148,7 +192,25 @@ export function samplesForRef(ref) {
   return res;
 }
 
+// Concrete sample -> cached AudioBuffer, or the group's synth voice if it failed to load.
+async function sampleOrFallback(ref) {
+  const buf = await sampleBuffer(getCtx(), ref.id);
+  if (buf) return { buf, sample: true };
+  const s = sampleById(ref.id);
+  const lib = ref.fallback ? libraryById(ref.fallback) : LIBRARY.find((l) => s && l.group === s.group);
+  const fb = ref.seed != null ? samplesForRef({ type: 'seed', seed: ref.seed }) : samplesForRef({ type: 'synth', id: lib ? lib.id : 'snd-classic' });
+  return { buf: bufferFromSamples(fb.samples, fb.sampleRate), sample: false };
+}
+
+// Samples for analysis (Lab/Battles): PCM of the concrete sound.
+export async function pcmForRef(ref) {
+  const r = resolveRef(ref);
+  if (r.type === 'smp') { const { buf } = await sampleOrFallback(r); return { samples: buf.getChannelData(0), sampleRate: buf.sampleRate }; }
+  return null;
+}
+
 export async function audioBufferForRef(ref) {
+  if (ref.type === 'smp') return (await sampleOrFallback(ref)).buf;
   if (ref.type === 'rec') {
     const { recordingsDB } = await import('./store.js');
     const rec = await recordingsDB.get(ref.id);
@@ -165,11 +227,16 @@ export async function audioBufferForRef(ref) {
 export async function play(ref, when = 0, opts = {}) {
   const c = getCtx();
   if (c.state !== 'running') { try { await c.resume(); } catch (e) { /* ignore */ } }
-  const buf = await audioBufferForRef(ref);
+  const r = resolveRef(ref);
+  const buf = await audioBufferForRef(r);
   if (!buf) return null;
   const src = c.createBufferSource();
   src.buffer = buf;
-  if (opts.rate) src.playbackRate.value = opts.rate;
+  // Real samples get a little random pitch/speed (about ±8%) so repeats feel fresh.
+  let rate = opts.rate || 1;
+  if (r.type === 'smp') { rate *= 0.92 + Math.random() * 0.16; markPlayed(r.id); }
+  if (rate !== 1) src.playbackRate.value = rate;
+  opts = { ...opts, rate };
   src.connect(master);
   const startAt = when > 0 ? when : c.currentTime;
   src.start(startAt);
@@ -178,7 +245,7 @@ export async function play(ref, when = 0, opts = {}) {
   // "time to first laugh" = first sound actually heard
   const delayMs = Math.max(0, (startAt - c.currentTime) * 1000);
   setTimeout(() => { if (!src._cancelled) metrics.soundPlayed(); }, delayMs);
-  return { source: src, endTime: startAt + buf.duration / (opts.rate || 1), duration: buf.duration };
+  return { source: src, endTime: startAt + buf.duration / rate, duration: buf.duration, ref: r };
 }
 
 export function stopAll() {

@@ -279,3 +279,50 @@ export function chooseLine(judgeId, score, seed, recent) {
   const pairingIdx = Math.floor(seed / 7) % PAIRINGS.length;
   return { band, badge: BANDS[band].badge, line: lines[idx], lineId: `${judgeId}:${band}:${idx}`, pairing: PAIRINGS[pairingIdx] };
 }
+
+// Group-specific remarks: one extra pre-written line about the kind of sound (real CC0 sample groups).
+// 3 lines per group per judge. Chosen deterministically from the analysis seed.
+export const GROUP_LINES = {
+  prof: {
+    whoopee: ['Aha, the classic cushion! A true laboratory standard.', 'Whoopee cushion detected. My research grant was worth it.', 'The cushion of science has spoken. Peer review: giggles.'],
+    squeak: ['A high squeak! My glasses nearly fogged up.', 'Squeak frequency: very high. Mouse community: impressed.', 'Such a squeaky specimen. I shall file it under Tiny Trumpets.'],
+    tuba: ['A deep brassy note. The tuba section would be proud.', 'Low and round, like a tuba humming in its sleep.', 'Brass detected! I must polish my Tootometer.'],
+    classic: ['A textbook toot. I shall put it in my textbook.', 'The classic recipe: short, sharp and scientific.', 'Exactly the toot from my lecture slides. Splendid.'],
+    cartoon: ['It echoes! Like a toot in a very large cartoon canyon.', 'Boing, boing, echo. This toot belongs on Saturday morning TV.', 'Echo detected. The toot is still bouncing around my lab.'],
+    wet: ['A bubbly blurp! Like a straw slurping the last of a milkshake.', 'Very bubbly. Hand me my rubber duck for scale.', 'Gurgle level: high. Swimming lessons recommended.'],
+    tiny: ['A micro-toot! I need my magnifying glass.', 'Small but mighty, like an ant playing the trumpet.', 'Barely there. A ninja toot. Most impressive stealth.'],
+    double: ['Two toots for the price of one. Excellent value for science.', 'A double act! Toot and its little echo, best friends.', 'Encore detected! The toot came back for a bow.'],
+    sequence: ['A whole parade of toots! I lost count at four.', 'A toot in several chapters. I await the sequel.', 'Toot, toot, toot! It is practically Morse code.'],
+    ripper: ['A long rumbling ripper! My beakers are still wobbling.', 'Rumble detected on all my instruments. Hold on to your lab coat.', 'That one went on and on, like a very proud motorbike.'],
+  },
+  reggie: {
+    whoopee: ['Ah, the cushion classic. A dish served at every fine party.', 'A whoopee cushion of rare pedigree. I tip my hat.', 'Simple ingredients, perfectly pressed. A cushion masterpiece.'],
+    squeak: ['A delicate squeak, light as a soufflé.', 'High notes like a teacup clinking. Most refined.', 'A squeaker with real finesse. I shall dab my moustache.'],
+    tuba: ['Deep and velvety, like a hot chocolate in brass form.', 'A rich, low note. I detect hints of marching band.', 'Hearty and round, like a good gravy. Superb.'],
+    classic: ['A classic, cooked exactly as Grandmother made it.', 'Traditional and honest. No fancy garnish needed.', 'The toot equivalent of a perfect cup of tea.'],
+    cartoon: ['It echoes through the dining hall. How theatrical!', 'A toot with its own reverb. Dramatic plating.', 'One toot, served with a side of echo. Delightful.'],
+    wet: ['A bubbly blurp, like soup that is very pleased with itself.', 'Rather fizzy. I shall need a larger napkin.', 'Effervescent! Like lemonade with opinions.'],
+    tiny: ['An amuse-bouche of a toot. Small, but it amused me.', 'A petite portion. I could have had seconds.', 'A tiny canapé of sound. Exquisite.'],
+    double: ['A two-course toot. Starter and main, both excellent.', 'Served twice, enjoyed twice. Splendid.', 'A double helping! The chef was generous today.'],
+    sequence: ['A tasting menu of toots, one after another.', 'Several small courses, each a surprise. Bravo.', 'A buffet of toots. I shall try them all.'],
+    ripper: ['A grand, long finish. The aftertaste goes on for days.', 'A banquet-sized rumble. Fetch the trolley!', 'Bold, booming and proud. A feast for the ears.'],
+  },
+  coach: {
+    whoopee: ['The classic cushion play! Textbook from the whole team!', 'Whoopee on the scoreboard! The crowd goes wild!', 'Old-school cushion move, and it still works every time!'],
+    squeak: ['A high squeak down the wing! What speed!', 'Squeaky sneakers on the court! Love the hustle!', 'That squeak hit the top corner of the net!'],
+    tuba: ['Big brass power from the back line!', 'That low note shook the stadium seats!', 'Tuba time! The marching band just got a new captain!'],
+    classic: ['A classic move, perfectly executed!', 'Straight down the middle. Fundamentals win games!', 'No tricks, just a clean toot. Coach is proud!'],
+    cartoon: ['It is echoing round the stadium! Unbelievable scenes!', 'Toot, echo, echo! The replay is playing itself!', 'That one bounced off every wall in the arena!'],
+    wet: ['A bubbly blurp! Somebody check the water bottle!', 'Splash play! The pool team wants you!', 'Fizzy and fearless! What a shot!'],
+    tiny: ['A tiny tap-in! Small shots still count!', 'Sneaky little toot past the goalie!', 'Quick and quiet. The defence never saw it coming!'],
+    double: ['A one-two combination! Brilliant teamwork!', 'Double toot! Two points on the board!', 'Bang, bang! The crowd is on its feet twice!'],
+    sequence: ['A full relay of toots! Pass, pass, pass, score!', 'What a combo! Somebody count those!', 'Toot after toot after toot! Unstoppable!'],
+    ripper: ['A long rumbling run down the whole field!', 'Rumble in the stadium! That went on for a whole lap!', 'Massive power, massive length, massive cheer!'],
+  },
+};
+
+export function chooseGroupLine(judgeId, group, seed) {
+  const lines = GROUP_LINES[judgeId] && GROUP_LINES[judgeId][group];
+  if (!lines) return null;
+  return lines[(Math.floor(seed / 13) >>> 0) % lines.length];
+}

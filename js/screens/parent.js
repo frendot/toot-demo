@@ -25,7 +25,7 @@ register('parent', async (root) => {
   const vol = el('input', { type: 'range', min: '10', max: '100', step: '5', value: String(Math.round(settings.volumeCap * 100)), id: 'vol-cap', 'aria-label': 'Volume cap' });
   const volLbl = el('b', {}, `${vol.value}%`);
   vol.addEventListener('input', () => { volLbl.textContent = `${vol.value}%`; });
-  vol.addEventListener('change', async () => { settings.volumeCap = vol.value / 100; await saveSettings(); await unlockAudio(); play({ type: 'lib', id: 'lib-whoopee' }); });
+  vol.addEventListener('change', async () => { settings.volumeCap = vol.value / 100; await saveSettings(); await unlockAudio(); play({ type: 'lib', id: 'snd-whoopee' }); });
 
   const sw = (key, label, after) => {
     const input = el('input', { type: 'checkbox', checked: settings[key], id: 'set-' + key });
@@ -88,7 +88,8 @@ register('parent', async (root) => {
           } }, 'Export backup'),
           el('button', { class: 'btn small', onclick: () => importIn.click() }, 'Import backup'), importIn)),
       section('Privacy',
-        el('button', { class: 'btn small', id: 'privacy', onclick: () => go('privacy') }, 'Read the privacy notice')),
+        el('button', { class: 'btn small', id: 'privacy', onclick: () => go('privacy') }, 'Read the privacy notice'),
+        el('button', { class: 'btn small', id: 'credits', onclick: () => go('credits') }, 'Credits & licences')),
       section('Delete everything',
         el('p', { class: 'muted small' }, 'Removes the collection, recordings, settings, usage counters and feedback from this device.'),
         el('button', { class: 'btn danger', id: 'delete-all', onclick: async () => {

@@ -9,6 +9,7 @@ import './screens/lab.js';
 import './screens/dex.js';
 import './screens/battles.js';
 import './screens/parent.js';
+import './screens/credits.js';
 
 async function boot() {
   installAudioUnlock();
@@ -22,7 +23,7 @@ async function boot() {
   else go('home', {}, { reset: true });
   history.replaceState({ n: 1 }, '');
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
-    navigator.serviceWorker.register('sw.js').catch(() => { /* offline support unavailable */ });
+    navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(() => { /* offline support unavailable */ });
   }
 }
 

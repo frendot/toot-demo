@@ -2,10 +2,11 @@
 import { el, mulberry32 } from '../util.js';
 import { kv, creaturesDB, recordingsDB, ensurePersist } from '../store.js';
 import { register, go, header, toast, confetti, statBars, cardButton, settings } from '../ui.js';
-import { play, LIBRARY, libraryById, samplesForRef, audioBufferForRef, unlockAudio, blip } from '../audio.js';
+import { play, LIBRARY, samplesForRef, audioBufferForRef, pcmForRef, resolveRef, groupOfRef, unlockAudio, blip } from '../audio.js';
 import { HoldRecorder, MAX_RECORD_MS, micSupported, pcmToWav } from '../recorder.js';
 import { analyse } from '../analysis.js';
-import { JUDGES, chooseLine, RARE_REACTIONS } from '../judges.js';
+import { JUDGES, chooseLine, chooseGroupLine, RARE_REACTIONS } from '../judges.js';
+import { sampleById } from '../samples.js';
 import { mintFromSound, CATALOG, creatureSVG } from '../creatures.js';
 import { renderCard } from '../cards.js';
 import { metrics } from '../metrics.js';
@@ -22,7 +23,7 @@ export async function samplesFor(ref) {
     const buf = await audioBufferForRef(ref);
     return buf ? { samples: buf.getChannelData(0), sampleRate: buf.sampleRate } : null;
   }
-  return samplesForRef(ref);
+  return (await pcmForRef(ref)) || samplesForRef(ref);
 }
 
 // Reusable hold-to-record behaviour (Lab + Battles). Mic only while held.
@@ -134,6 +135,8 @@ let lastReview = null;
 
 register('analysis', async (root, { src, judge }) => {
   await unlockAudio();
+  // Pick the concrete sample once, so the toot you hear is exactly the one being judged.
+  if (src.ref && !src.samples) src = { ...src, ref: resolveRef(src.ref), group: groupOfRef(src.ref) };
   const data = src.samples ? { samples: src.samples, sampleRate: src.sampleRate } : await samplesFor(src.ref);
   const a = analyse(data.samples, data.sampleRate);
   if (src.kind !== 'rec' || !src.blob) play(src.ref || { type: 'pcm', samples: data.samples, sampleRate: data.sampleRate });
@@ -166,6 +169,8 @@ register('review', async (root, { src, analysis: a, judge }) => {
   metrics.feature('labReview');
   const recent = (await kv.get('recentLines')) || [];
   const pick = chooseLine(judge, a.score, a.seed, recent);
+  const groupLine = src.group ? chooseGroupLine(judge, src.group, a.seed) : null;
+  const smp = src.ref && src.ref.type === 'smp' ? sampleById(src.ref.id) : null;
   recent.push(pick.lineId);
   while (recent.length > 15) recent.shift();
   await kv.set('recentLines', recent);
@@ -184,7 +189,7 @@ register('review', async (root, { src, analysis: a, judge }) => {
   lastReview = { src, a, judge, pick };
 
   const nextJudge = JUDGES[(JUDGES.findIndex((x) => x.id === judge) + 1) % JUDGES.length];
-  const makeBlob = () => renderCard({ kind: 'Lab Report', title: `${j.name} says…`, big: `${a.score}/100`, subtitle: `Badge: ${pick.badge}`, lines: [`“${pick.line}”`, pick.pairing], species, accent: j.color });
+  const makeBlob = () => renderCard({ kind: 'Lab Report', title: `${j.name} says…`, big: `${a.score}/100`, subtitle: `Badge: ${pick.badge}`, lines: [`“${pick.line}”`, groupLine ? `“${groupLine}”` : pick.pairing], species, accent: j.color });
 
   let saveBtn = null;
   if (src.kind === 'rec') {
@@ -209,10 +214,12 @@ register('review', async (root, { src, analysis: a, judge }) => {
       el('div', { class: 'judge-portrait' + (rare && rare.id === 'glasses' ? ' shake' : ''), html: judgeSVG(judge, 120) }),
       el('h3', {}, j.name),
       el('blockquote', { id: 'judge-line' }, `“${pick.line}”`),
+      groupLine ? el('p', { class: 'group-line', id: 'group-line' }, `“${groupLine}”`) : null,
       el('div', { class: 'score', id: 'score' }, String(a.score), el('small', {}, '/100')),
       el('span', { class: 'badge' }, pick.badge),
       el('p', { class: 'muted pairing' }, pick.pairing),
       statBars(a.stats),
+      smp ? el('p', { class: 'muted small', id: 'sample-credit' }, `Sound: ${smp.id} · CC0 · ${smp.author.replace(/ \(.*\)/, '')}`) : null,
       creature ? el('div', { class: 'minted' }, el('span', { html: creatureSVG(species, 56) }), el('span', {}, minted.already ? `${creature.name} is in your Toot-o-dex` : `New creature: ${creature.name} (${creature.rarity}) added to your Toot-o-dex!`)) : null,
       el('button', { class: 'btn', id: 'next-judge', onclick: () => go('review', { src, analysis: a, judge: nextJudge.id }, { replace: true }) }, `Ask ${nextJudge.name}`),
       saveBtn,

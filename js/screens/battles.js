@@ -3,9 +3,9 @@
 import { el, sleep } from '../util.js';
 import { creaturesDB } from '../store.js';
 import { register, go, header, toast, confetti, cardButton } from '../ui.js';
-import { play, LIBRARY, unlockAudio, drumroll } from '../audio.js';
+import { play, LIBRARY, unlockAudio, drumroll, resolveRef, groupOfRef } from '../audio.js';
 import { analyse } from '../analysis.js';
-import { chooseLine } from '../judges.js';
+import { chooseLine, chooseGroupLine } from '../judges.js';
 import { PROMPTS } from '../prompts.js';
 import { renderCard } from '../cards.js';
 import { metrics } from '../metrics.js';
@@ -74,6 +74,7 @@ register('battleTurn', async (root) => {
   let detach = null;
   const submit = async (src) => {
     await unlockAudio();
+    if (src.ref && !src.samples) src = { ...src, ref: resolveRef(src.ref), group: groupOfRef(src.ref) }; // the sample heard = the sample judged
     const data = src.samples ? src : await samplesFor(src.ref);
     const a = analyse(data.samples, data.sampleRate);
     go('battleJudged', { src: { ...src, samples: data.samples, sampleRate: data.sampleRate }, analysis: a }, { replace: true });
@@ -112,6 +113,7 @@ register('battleJudged', async (root, { src, analysis: a }) => {
     el('div', { html: judgeSVG('prof', 90) }),
     el('h3', {}, `${p.name} played ${src.name}`),
     el('blockquote', {}, `“${pick.line}”`),
+    src.group && chooseGroupLine('prof', src.group, a.seed) ? el('p', { class: 'group-line' }, `“${chooseGroupLine('prof', src.group, a.seed)}”`) : null,
     el('div', { class: 'score', id: 'battle-score' }, String(a.score), el('small', {}, '/100')),
     el('button', { class: 'btn primary huge', id: 'battle-next', onclick: () => {
       battle.turn++;
@@ -170,7 +172,7 @@ register('battleFinale', async (root) => {
   const makeBlob = () => renderCard({ kind: 'Family Toot Champion', title, subtitle: `${battle.rounds} rounds · ${battle.players.length} players`, lines: sorted.map((p, i) => `${i + 1}. ${p.name} — ${p.total} pts`), accent: '#ffb300' });
   drumroll(1400);
   await sleep(1400);
-  play({ type: 'lib', id: 'lib-trumpet' });
+  play({ type: 'synth', id: 'lib-trumpet' }); // fanfare stays synthesised
   confetti(90);
   root.append(el('main', { class: 'pad center finale' },
     el('div', { class: 'trophy pop', html: trophySVG(170) }),

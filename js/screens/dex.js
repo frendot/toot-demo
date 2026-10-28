@@ -2,7 +2,8 @@
 import { el, sleep } from '../util.js';
 import { register, go, header, statBars, cardButton, confetti } from '../ui.js';
 import { play, drumroll, blip, unlockAudio } from '../audio.js';
-import { RARITIES, FAMILIES, CATALOG, creatureSVG, collectionStats, packsWaiting, openPack } from '../creatures.js';
+import { RARITIES, FAMILIES, FAMILY_GROUPS, CATALOG, creatureSVG, collectionStats, packsWaiting, openPack } from '../creatures.js';
+import { groupById } from '../samples.js';
 import { creaturesDB } from '../store.js';
 import { renderCard } from '../cards.js';
 import { metrics } from '../metrics.js';
@@ -42,7 +43,9 @@ register('dex', async (root) => {
     el('main', { class: 'pad' },
       el('div', { class: 'progress-card' },
         el('h2', { id: 'dex-total' }, `${have} / ${total} found (${pct(have, total)}%)`),
-        FAMILIES.map((f) => el('div', { class: 'fam' }, el('span', {}, f), el('span', { class: 'stat-bar' }, el('b', { style: { width: pct(per[f].have, per[f].total) + '%' } })), el('small', {}, `${per[f].have}/${per[f].total}`)))),
+        FAMILIES.map((f) => el('div', { class: 'fam' }, el('span', {}, f), el('span', { class: 'stat-bar' }, el('b', { style: { width: pct(per[f].have, per[f].total) + '%' } })), el('small', {}, `${per[f].have}/${per[f].total}`))),
+        el('details', { class: 'fam-sounds' }, el('summary', {}, 'Which sounds live in each family?'),
+          FAMILIES.map((f) => el('p', { class: 'small' }, el('b', {}, f + ': '), [...FAMILY_GROUPS[f]].map((g) => groupById(g).name).join(', '))))),
       waiting > 0 ? el('button', { class: 'pack-waiting wobble', onclick: () => go('pack') }, el('b', {}, 'Open your free Puff Pack'), el('span', {}, `${waiting} waiting`)) : null,
       el('div', { class: 'row' }, sortSel, filterSel),
       grid,
@@ -61,6 +64,7 @@ register('creature', async (root, { id }) => {
       el('h2', {}, c.name),
       el('span', { class: `rarity r-${c.rarity}` }, c.rarity), el('span', { class: 'muted' }, `  ${c.family} family · found ×${c.count}`),
       el('p', { class: 'bio' }, c.bio),
+      el('p', { class: 'muted small', id: 'creature-voice' }, c.soundRef && c.soundRef.type === 'rec' ? 'Voice: your own recording (kept on this phone)' : `Voice: ${groupById(sp.group).name}`),
       statBars(c.stats),
       el('button', { class: 'btn primary big', id: 'creature-play', onclick: async () => { await unlockAudio(); play(c.soundRef); metrics.count('creaturePlayed'); } }, '▶ Play'),
       el('div', { class: 'row' },
